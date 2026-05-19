@@ -1,30 +1,37 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 from datetime import datetime
+import uuid as _uuid
 
 
-# ── Collaborator ────────────────────────────────────────────────────────────
+# ── Collaborator ─────────────────────────────────────────────────────────────
 
 class CollaboratorBase(BaseModel):
+    id: str = Field(default_factory=lambda: str(_uuid.uuid4()))
     name: str
     role: str
     block_saturday_1: bool = False
 
 
-class CollaboratorCreate(CollaboratorBase):
-    pass
+class CollaboratorCreate(BaseModel):
+    name: str
+    role: str
+    block_saturday_1: bool = False
 
 
-class CollaboratorResponse(CollaboratorBase):
+class CollaboratorResponse(BaseModel):
     id: str
+    name: str
+    role: str
+    block_saturday_1: bool
     created_at: datetime
-
     model_config = {"from_attributes": True}
 
 
-# ── Shift ────────────────────────────────────────────────────────────────────
+# ── Shift ─────────────────────────────────────────────────────────────────────
 
 class ShiftBase(BaseModel):
+    id: str = Field(default_factory=lambda: str(_uuid.uuid4()))
     name: str
     start_time: str
     required_graduados: int = 0
@@ -33,18 +40,28 @@ class ShiftBase(BaseModel):
     required_servicos_gerais: int = 0
 
 
-class ShiftCreate(ShiftBase):
-    pass
+class ShiftCreate(BaseModel):
+    name: str
+    start_time: str
+    required_graduados: int = 0
+    required_estagiarios: int = 0
+    required_recepcao: int = 0
+    required_servicos_gerais: int = 0
 
 
-class ShiftResponse(ShiftBase):
+class ShiftResponse(BaseModel):
     id: str
+    name: str
+    start_time: str
+    required_graduados: int
+    required_estagiarios: int
+    required_recepcao: int
+    required_servicos_gerais: int
     created_at: datetime
-
     model_config = {"from_attributes": True}
 
 
-# ── Schedule / Generation ────────────────────────────────────────────────────
+# ── Schedule / Generation ─────────────────────────────────────────────────────
 
 class ScheduleRequest(BaseModel):
     collaborators: List[CollaboratorBase]
@@ -54,11 +71,12 @@ class ScheduleRequest(BaseModel):
 
 
 class ShiftAssignment(BaseModel):
+    id: str = ""
     shift_id: str
     shift_name: str
     collaborator_id: str
     collaborator_name: str
-    date: str        # "YYYY-MM-DD" or weekday label for stateless use
+    date: str
     start_time: str
     end_time: str
 
@@ -71,7 +89,54 @@ class ScheduleResult(BaseModel):
     year: Optional[int] = None
 
 
-# ── Public / Professional access ─────────────────────────────────────────────
+# ── Saved Schedules ───────────────────────────────────────────────────────────
+
+class ScheduleListItem(BaseModel):
+    id: str
+    month: int
+    year: int
+    access_token: str
+    created_at: datetime
+    assignments_count: int = 0
+
+
+class FullScheduleResponse(BaseModel):
+    id: str
+    month: int
+    year: int
+    access_token: str
+    assignments: List[ShiftAssignment]
+
+
+class ManualScheduleCreate(BaseModel):
+    month: int
+    year: int
+
+
+class AssignmentCreate(BaseModel):
+    collaborator_id: str
+    collaborator_name: str
+    shift_id: str
+    shift_name: str
+    date: str
+    start_time: str
+    end_time: str
+
+
+class AssignmentResponse(BaseModel):
+    id: str
+    schedule_id: str
+    collaborator_id: str
+    collaborator_name: str
+    shift_id: str
+    shift_name: str
+    date: str
+    start_time: str
+    end_time: str
+    model_config = {"from_attributes": True}
+
+
+# ── Public access ─────────────────────────────────────────────────────────────
 
 class SaveScheduleResponse(BaseModel):
     id: str

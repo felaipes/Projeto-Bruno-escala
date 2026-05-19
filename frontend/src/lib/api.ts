@@ -13,7 +13,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type Collaborator = {
   id: string;
@@ -35,6 +35,7 @@ export type Shift = {
 };
 
 export type ShiftAssignment = {
+  id: string;
   shift_id: string;
   shift_name: string;
   collaborator_id: string;
@@ -53,13 +54,30 @@ export type ScheduleResult = {
 };
 
 export type ScheduleRequest = {
-  collaborators: Omit<Collaborator, "id" | "created_at">[];
-  shifts: Omit<Shift, "id" | "created_at">[];
+  collaborators: Omit<Collaborator, "created_at">[];
+  shifts: { id?: string; name: string; start_time: string; required_graduados: number; required_estagiarios: number; required_recepcao: number; required_servicos_gerais: number }[];
   month?: number;
   year?: number;
 };
 
 export type SaveScheduleResponse = { id: string; access_token: string };
+
+export type ScheduleListItem = {
+  id: string;
+  month: number;
+  year: number;
+  access_token: string;
+  created_at: string;
+  assignments_count: number;
+};
+
+export type FullScheduleResponse = {
+  id: string;
+  month: number;
+  year: number;
+  access_token: string;
+  assignments: ShiftAssignment[];
+};
 
 export type PublicScheduleResponse = {
   id: string;
@@ -68,7 +86,17 @@ export type PublicScheduleResponse = {
   assignments: ShiftAssignment[];
 };
 
-// ── Collaborators ────────────────────────────────────────────────────────────
+export type AssignmentCreate = {
+  collaborator_id: string;
+  collaborator_name: string;
+  shift_id: string;
+  shift_name: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+};
+
+// ── API client ────────────────────────────────────────────────────────────────
 
 export const api = {
   collaborators: {
@@ -92,11 +120,21 @@ export const api = {
   },
 
   schedules: {
+    list: () => request<ScheduleListItem[]>("/api/schedules/"),
+    getById: (id: string) => request<FullScheduleResponse>(`/api/schedules/${id}`),
     generate: (data: ScheduleRequest) =>
       request<ScheduleResult>("/api/schedules/generate", { method: "POST", body: JSON.stringify(data) }),
     save: (data: ScheduleRequest) =>
       request<SaveScheduleResponse>("/api/schedules/save", { method: "POST", body: JSON.stringify(data) }),
+    createManual: (month: number, year: number) =>
+      request<SaveScheduleResponse>("/api/schedules/manual", { method: "POST", body: JSON.stringify({ month, year }) }),
     getPublic: (token: string) =>
       request<PublicScheduleResponse>(`/api/schedules/public/${token}`),
+    addAssignment: (scheduleId: string, data: AssignmentCreate) =>
+      request<ShiftAssignment>(`/api/schedules/${scheduleId}/assignments`, { method: "POST", body: JSON.stringify(data) }),
+    removeAssignment: (scheduleId: string, assignmentId: string) =>
+      request<void>(`/api/schedules/${scheduleId}/assignments/${assignmentId}`, { method: "DELETE" }),
   },
+
+  seed: () => request<{ message: string; collaborators: number; assignments: number; schedule_id: string }>("/api/seed", { method: "POST" }),
 };

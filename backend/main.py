@@ -1,11 +1,10 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import APP_NAME, CORS_ORIGINS
 from app.database import engine, Base
-from app.api import collaborators, shifts, schedules
+from app.api import collaborators, shifts, schedules, seed
 
-# Create all tables on startup
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=APP_NAME)
@@ -21,6 +20,7 @@ app.add_middleware(
 app.include_router(collaborators.router)
 app.include_router(shifts.router)
 app.include_router(schedules.router)
+app.include_router(seed.router)
 
 
 @app.get("/health")

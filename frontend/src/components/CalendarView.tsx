@@ -12,10 +12,11 @@ interface CalendarViewProps {
   month: number;
   year: number;
   assignments: ShiftAssignment[];
-  collaboratorId?: string; // if set, only show this person's shifts
+  collaboratorId?: string;
+  onDayClick?: (date: string) => void;
 }
 
-export function CalendarView({ month, year, assignments, collaboratorId }: CalendarViewProps) {
+export function CalendarView({ month, year, assignments, collaboratorId, onDayClick }: CalendarViewProps) {
   const filtered = useMemo(
     () =>
       collaboratorId
@@ -66,7 +67,8 @@ export function CalendarView({ month, year, assignments, collaboratorId }: Calen
           return (
             <div
               key={i}
-              className={`bg-[#141414] min-h-[80px] p-1.5 ${!day ? "opacity-0 pointer-events-none" : ""}`}
+              onClick={() => day && dateStr && onDayClick?.(dateStr)}
+              className={`bg-[#141414] min-h-[80px] p-1.5 ${!day ? "opacity-0 pointer-events-none" : onDayClick ? "cursor-pointer hover:bg-[#1A1A1A] transition-colors" : ""}`}
             >
               {day && (
                 <>

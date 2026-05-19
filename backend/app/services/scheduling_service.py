@@ -1,4 +1,5 @@
 import calendar
+import uuid as _uuid
 from datetime import date, datetime, timedelta
 from typing import List, Dict, Set, Tuple
 
@@ -10,25 +11,13 @@ from app.schemas.schemas import (
     ShiftAssignment,
 )
 
-# Maps Portuguese weekday names in shift names to weekday numbers (Monday=0)
 WEEKDAY_MAP = {
-    "segunda": 0,
-    "terça": 1,
-    "terca": 1,
-    "quarta": 2,
-    "quinta": 3,
-    "sexta": 4,
-    "sábado": 5,
-    "sabado": 5,
-    "domingo": 6,
+    "segunda": 0, "terça": 1, "terca": 1, "quarta": 2,
+    "quinta": 3, "sexta": 4, "sábado": 5, "sabado": 5, "domingo": 6,
 }
 
-# Shift durations per role (hours)
 DURATIONS = {
-    "graduado": 6,
-    "estagiario": 5,
-    "recepcao": 6,
-    "servicos_gerais": 6,
+    "graduado": 6, "estagiario": 5, "recepcao": 6, "servicos_gerais": 6,
 }
 
 
@@ -46,7 +35,6 @@ def _detect_weekday(shift_name: str) -> int | None:
 
 
 def _dates_for_weekday(weekday: int, month: int, year: int) -> List[date]:
-    """Return all dates in month/year that fall on the given weekday."""
     _, days_in_month = calendar.monthrange(year, month)
     return [
         date(year, month, d)
@@ -57,38 +45,37 @@ def _dates_for_weekday(weekday: int, month: int, year: int) -> List[date]:
 
 class SchedulingService:
     def __init__(self, request: ScheduleRequest):
-        self.collaborators = request.collaborators
-        self.shifts = request.shifts
+        # Ensure every collaborator and shift has an id
+        self.collaborators = []
+        for c in request.collaborators:
+            if not c.id:
+                c = c.model_copy(update={"id": str(_uuid.uuid4())})
+            self.collaborators.append(c)
+
+        self.shifts = []
+        for s in request.shifts:
+            if not s.id:
+                s = s.model_copy(update={"id": str(_uuid.uuid4())})
+            self.shifts.append(s)
+
         self.month = request.month
         self.year = request.year
         self._validate_asterisk_rule()
 
-    # ── Validation ───────────────────────────────────────────────────────────
-
     def _validate_asterisk_rule(self):
-        roles_to_check = ["graduado", "estagiario", "recepcao"]
-        for role in roles_to_check:
+        for role in ["graduado", "estagiario", "recepcao"]:
             group = [c for c in self.collaborators if c.role == role]
             blocked = [c for c in group if c.block_saturday_1]
             if len(blocked) > 2:
-                raise ValueError(
-                    f"Limite de restrições ultrapassado: máximo de 2 {role}s bloqueados no Sábado 1."
-                )
+                raise ValueError(f"Máximo de 2 {role}s bloqueados no Sábado 1.")
             if group and len(blocked) == len(group):
-                raise ValueError(
-                    f"100% da equipe de {role}s está bloqueada para o Sábado 1."
-                )
-
-    # ── Core generation ──────────────────────────────────────────────────────
+                raise ValueError(f"100% dos {role}s estão bloqueados para o Sábado 1.")
 
     def generate(self) -> ScheduleResult:
         use_real_dates = self.month is not None and self.year is not None
-
         assignments: List[ShiftAssignment] = []
         unfilled: List[dict] = []
         shift_counts: Dict[str, int] = {c.id: 0 for c in self.collaborators}
-
-        # Track booked slots: collaborator_id → set of (date, start_time) tuples
         booked: Dict[str, Set[Tuple[str, str]]] = {c.id: set() for c in self.collaborators}
 
         role_groups = {
@@ -124,7 +111,7 @@ class SchedulingService:
                     candidates = [
                         c for c in role_groups[role]
                         if not (is_saturday_1 and c.block_saturday_1)
-                        and (current_date is None or (date_label, shift.start_time) not in booked[c.id])
+                        and (date_label, shift.start_time) not in booked[c.id]
                     ]
                     candidates.sort(key=lambda x: shift_counts[x.id])
 
@@ -133,36 +120,26 @@ class SchedulingService:
                         if assigned >= required_count:
                             break
                         end_time = _add_hours(shift.start_time, DURATIONS.get(role, 6))
-                        assignments.append(
-                            ShiftAssignment(
-                                shift_id=shift.id,
-                                shift_name=shift.name,
-                                collaborator_id=c.id,
-                                collaborator_name=c.name,
-                                date=date_label,
-                                start_time=shift.start_time,
-                                end_time=end_time,
-                            )
-                        )
+                        assignments.append(ShiftAssignment(
+                            shift_id=shift.id,
+                            shift_name=shift.name,
+                            collaborator_id=c.id,
+                            collaborator_name=c.name,
+                            date=date_label,
+                            start_time=shift.start_time,
+                            end_time=end_time,
+                        ))
                         booked[c.id].add((date_label, shift.start_time))
                         shift_counts[c.id] += 1
                         assigned += 1
 
                     if assigned < required_count:
-                        unfilled.append(
-                            {
-                                "shift_id": shift.id,
-                                "shift_name": shift.name,
-                                "date": date_label,
-                                "role": role,
-                                "missing": required_count - assigned,
-                            }
-                        )
+                        unfilled.append({
+                            "shift_id": shift.id, "shift_name": shift.name,
+                            "date": date_label, "role": role, "missing": required_count - assigned,
+                        })
 
         return ScheduleResult(
-            assignments=assignments,
-            unfilled_shifts=unfilled,
-            shift_counts=shift_counts,
-            month=self.month,
-            year=self.year,
+            assignments=assignments, unfilled_shifts=unfilled,
+            shift_counts=shift_counts, month=self.month, year=self.year,
         )
