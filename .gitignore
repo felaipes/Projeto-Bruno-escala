@@ -32,3 +32,19 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# SQLite database
+*.db
+*.db-shm
+*.db-wal
+
+# Next.js build
+.next/
+out/
+
+# env locals
+.env.local
+.env.*.local
+
+# Alembic
+alembic/versions/*.py
