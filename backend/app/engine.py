@@ -33,6 +33,8 @@ class SchedulingEngine:
         shift_counts = {c.id: 0 for c in self.collaborators}
         weekend_counts = {c.id: 0 for c in self.collaborators}
         
+        worked_weeks = {c.id: set() for c in self.collaborators}
+        
         for day in self.selected_days:
             is_weekend = day in ['Sábado', 'Domingo']
             
@@ -42,19 +44,32 @@ class SchedulingEngine:
                 
                 # Para cada cargo, tentamos distribuir uniformemente nas 4 semanas
                 for role in ['graduado', 'estagiario', 'recepcao', 'servicos_gerais']:
-                    available = [c for c in self.collaborators if c.role == role and not (day == 'Sábado' and c.block_saturday_1)]
-                    # Ordenar por quem trabalhou menos fds
-                    available.sort(key=lambda x: weekend_counts[x.id])
-                    
-                    if not available:
-                        continue
-                        
-                    # Distribuir nas 4 semanas
                     for week in weeks:
                         date_str = f"{day} (Semana {week})"
                         
+                        # Filtrar colaboradores disponíveis que não violam a regra de alternância
+                        available = []
+                        for c in self.collaborators:
+                            if c.role != role:
+                                continue
+                            if day == 'Sábado' and week == 1 and c.block_saturday_1:
+                                continue
+                            
+                            # Regra: não pode trabalhar na mesma semana, nem na anterior, nem na seguinte
+                            if week in worked_weeks[c.id] or (week - 1) in worked_weeks[c.id] or (week + 1) in worked_weeks[c.id]:
+                                continue
+                                
+                            available.append(c)
+                            
+                        if not available:
+                            unfilled.append({
+                                "shift_id": date_str,
+                                "role": role,
+                                "missing": 1
+                            })
+                            continue
+                            
                         # Pegar a pessoa que tem menos finais de semana trabalhados
-                        # Como estamos em loop, re-ordenamos a cada semana
                         available.sort(key=lambda x: weekend_counts[x.id])
                         c = available[0]
                         
@@ -67,6 +82,7 @@ class SchedulingEngine:
                         ))
                         shift_counts[c.id] += 1
                         weekend_counts[c.id] += 1
+                        worked_weeks[c.id].add(week)
             else:
                 # Dia útil: todos os colaboradores trabalham nos seus horários fixos
                 for c in self.collaborators:
