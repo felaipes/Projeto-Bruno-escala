@@ -26,9 +26,18 @@ type ScheduleResult = {
 };
 
 const PROFESSIONAL_COLORS = [
-  'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 
-  'bg-indigo-500', 'bg-teal-500', 'bg-rose-500', 'bg-amber-500',
-  'bg-cyan-500', 'bg-lime-500', 'bg-fuchsia-500', 'bg-violet-500'
+  { bg: 'bg-blue-500/20', border: 'border-blue-500/50', text: 'text-blue-400', dot: 'bg-blue-500' },
+  { bg: 'bg-emerald-500/20', border: 'border-emerald-500/50', text: 'text-emerald-400', dot: 'bg-emerald-500' },
+  { bg: 'bg-purple-500/20', border: 'border-purple-500/50', text: 'text-purple-400', dot: 'bg-purple-500' },
+  { bg: 'bg-pink-500/20', border: 'border-pink-500/50', text: 'text-pink-400', dot: 'bg-pink-500' },
+  { bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', text: 'text-indigo-400', dot: 'bg-indigo-500' },
+  { bg: 'bg-teal-500/20', border: 'border-teal-500/50', text: 'text-teal-400', dot: 'bg-teal-500' },
+  { bg: 'bg-rose-500/20', border: 'border-rose-500/50', text: 'text-rose-400', dot: 'bg-rose-500' },
+  { bg: 'bg-amber-500/20', border: 'border-amber-500/50', text: 'text-amber-400', dot: 'bg-amber-500' },
+  { bg: 'bg-cyan-500/20', border: 'border-cyan-500/50', text: 'text-cyan-400', dot: 'bg-cyan-500' },
+  { bg: 'bg-lime-500/20', border: 'border-lime-500/50', text: 'text-lime-400', dot: 'bg-lime-500' },
+  { bg: 'bg-fuchsia-500/20', border: 'border-fuchsia-500/50', text: 'text-fuchsia-400', dot: 'bg-fuchsia-500' },
+  { bg: 'bg-violet-500/20', border: 'border-violet-500/50', text: 'text-violet-400', dot: 'bg-violet-500' }
 ];
 
 const daysOfWeek = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
@@ -54,7 +63,7 @@ export default function HomePage() {
   const [result, setResult] = useState<ScheduleResult | null>(null);
 
   const teamColorMap = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, typeof PROFESSIONAL_COLORS[0]>();
     team.forEach((member, index) => {
       map.set(member.id, PROFESSIONAL_COLORS[index % PROFESSIONAL_COLORS.length]);
     });
@@ -517,11 +526,11 @@ export default function HomePage() {
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(result.shift_counts).map(([id, count]) => {
                     const c = team.find(x => x.id === id);
-                    const colorClass = teamColorMap.get(id) || 'bg-gray-500';
+                    const color = teamColorMap.get(id) || PROFESSIONAL_COLORS[0];
                     return c ? (
-                      <span key={id} className="flex items-center gap-2 bg-[#141414] pr-3 py-1 rounded-full text-xs font-medium border border-[#232323] text-[#FFFFFF]">
-                        <span className={`w-3 h-3 rounded-full ml-1 ${colorClass}`}></span>
-                        {c.name}: <span className="text-[#FF4D1C] font-bold">{count}</span>
+                      <span key={id} className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border ${color.bg} ${color.border} ${color.text}`}>
+                        <span className={`w-3 h-3 rounded-full ml-1 ${color.dot}`}></span>
+                        {c.name}: <span>{count}</span>
                       </span>
                     ) : null;
                   })}
@@ -554,16 +563,14 @@ export default function HomePage() {
                           {assignments.length > 0 ? (
                             assignments.map((assignment, aIdx) => {
                               const collaborator = team.find(c => c.id === assignment.collaborator_id);
-                              const colorClass = teamColorMap.get(assignment.collaborator_id) || 'bg-gray-500';
+                              const color = teamColorMap.get(assignment.collaborator_id) || PROFESSIONAL_COLORS[0];
                               return (
                                 <div 
                                   key={`${assignment.shift_id}-${aIdx}`} 
-                                  className={`px-2 py-1.5 rounded text-xs border-l-[3px] shadow-sm bg-[#141414] hover:bg-[#1A1A1A] flex flex-col gap-0.5`}
-                                  style={{ borderLeftColor: 'var(--tw-color)' }}
+                                  className={`px-2 py-1.5 rounded flex flex-col gap-0.5 border-l-[3px] shadow-sm transition-all hover:brightness-110 ${color.bg} ${color.border}`}
                                 >
-                                  <div className={`absolute -ml-[3px] top-0 bottom-0 w-[3px] rounded-l ${colorClass}`}></div>
-                                  <span className="font-bold text-[#FFFFFF] truncate leading-none" title={collaborator?.name}>{collaborator?.name || 'Vazio'}</span>
-                                  <span className="text-[10px] font-mono text-[#A1A1A1] leading-none">{assignment.start_time.substring(0,5)} - {assignment.end_time.substring(0,5)}</span>
+                                  <span className={`font-bold text-xs truncate leading-none ${color.text}`} title={collaborator?.name}>{collaborator?.name || 'Vazio'}</span>
+                                  <span className={`text-[10px] font-mono leading-none ${color.text} opacity-80`}>{assignment.start_time.substring(0,5)} - {assignment.end_time.substring(0,5)}</span>
                                 </div>
                               )
                             })
