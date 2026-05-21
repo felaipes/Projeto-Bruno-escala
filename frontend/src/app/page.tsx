@@ -208,39 +208,48 @@ export default function HomePage() {
     });
   }, [result?.assignments, activeTab, team]);
   
-  const calendarDays = useMemo(() => {
-    const groups: Record<string, ShiftAssignment[]> = {};
-    const dayGroups = [...daysOfWeek].filter(d => selectedDays.includes(d));
+  const calendarGrid = useMemo(() => {
+    const weeks = [0, 1, 2, 3]; // 4 Semanas (índices)
+    const grid: Record<string, ShiftAssignment[]>[] = [];
     
-    // Expand weekends in calendar columns
-    if (selectedDays.includes('Sábado')) {
-        dayGroups.splice(dayGroups.indexOf('Sábado'), 1); // remove o genérico
-        dayGroups.push('Sábado (Semana 1)', 'Sábado (Semana 2)', 'Sábado (Semana 3)', 'Sábado (Semana 4)');
-    }
-    if (selectedDays.includes('Domingo')) {
-        dayGroups.splice(dayGroups.indexOf('Domingo'), 1); // remove o genérico
-        dayGroups.push('Domingo (Semana 1)', 'Domingo (Semana 2)', 'Domingo (Semana 3)', 'Domingo (Semana 4)');
-    }
-    
-    dayGroups.forEach(d => groups[d] = []);
+    weeks.forEach(() => {
+       const weekRow: Record<string, ShiftAssignment[]> = {};
+       daysOfWeek.forEach(day => {
+          weekRow[day] = [];
+       });
+       grid.push(weekRow);
+    });
 
     filteredAssignments.forEach(assignment => {
-      const dateKey = assignment.date; // already has "Sábado (Semana X)" or "Segunda"
-      if (groups[dateKey]) {
-        groups[dateKey].push(assignment);
-      } else {
-        const firstWord = dateKey.split(' ')[0];
-        if (!groups[firstWord]) groups[firstWord] = [];
-        groups[firstWord].push(assignment);
-      }
+       const isWeekend = assignment.date.includes('Semana');
+       
+       if (isWeekend) {
+          const match = assignment.date.match(/Semana (\d)/);
+          const weekIdx = match ? parseInt(match[1]) - 1 : 0;
+          const baseDay = assignment.date.split(' ')[0]; // Sábado ou Domingo
+          
+          if (grid[weekIdx] && grid[weekIdx][baseDay]) {
+             grid[weekIdx][baseDay].push(assignment);
+          }
+       } else {
+          // Dia Útil (Segunda a Sexta): Clonar para todas as 4 semanas visualmente
+          const baseDay = assignment.date;
+          if (daysOfWeek.includes(baseDay)) {
+             weeks.forEach((weekIdx) => {
+                grid[weekIdx][baseDay].push(assignment);
+             });
+          }
+       }
     });
 
-    Object.keys(groups).forEach(day => {
-      groups[day].sort((a, b) => a.start_time.localeCompare(b.start_time));
+    grid.forEach(weekRow => {
+       Object.values(weekRow).forEach(cell => {
+          cell.sort((a, b) => a.start_time.localeCompare(b.start_time));
+       });
     });
 
-    return groups;
-  }, [filteredAssignments, selectedDays]);
+    return grid;
+  }, [filteredAssignments]);
 
   const renderNamesInput = (roleKey: string, roleName: string) => {
     const members = team.filter(c => c.role === roleKey);
@@ -472,13 +481,13 @@ export default function HomePage() {
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2">
                   <Calendar className="text-[#FF4D1C]" />
-                  Calendário da Escala
+                  Calendário Mensal da Escala
                 </h2>
-                <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Visualização semanal agrupada por dias e cores.</p>
+                <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Visualização em grade (Google Agenda) com rodízio inteligente.</p>
               </div>
               <button 
                 onClick={restartProcess}
-                className="flex items-center gap-2 px-4 py-2 bg-[#141414] border border-[#232323] hover:bg-[#232323] text-[#FFFFFF] rounded-lg transition-colors shadow-sm text-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-[#141414] border border-[#232323] hover:bg-[#232323] text-[#FFFFFF] rounded-lg transition-colors shadow-sm text-sm shrink-0"
               >
                 <Home size={16} /> Nova Escala
               </button>
@@ -520,56 +529,53 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Unfilled warnings */}
-            {result.unfilled_shifts && result.unfilled_shifts.length > 0 && (
-              <div className="p-4 bg-orange-950/30 border border-orange-900/50 text-orange-400 rounded-xl">
-                <p className="font-bold flex items-center gap-2 mb-2 text-sm"><AlertCircle size={16} /> Atenção: Faltam colaboradores</p>
-                <ul className="list-disc pl-5 text-xs sm:text-sm space-y-1 text-orange-300/80">
-                  {result.unfilled_shifts.map((u, idx) => (
-                    <li key={idx}>
-                      Faltam {u.missing} {u.role}(s) no dia/turno {u.shift_id}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Google Agenda Style Calendar Grid */}
-            <div className="flex overflow-x-auto pb-4 hide-scrollbar">
-              <div className="flex gap-3 min-w-max">
-                {Object.keys(calendarDays).filter(day => calendarDays[day]?.length > 0 || !day.includes('Semana')).map(day => (
-                  <div key={day} className="flex flex-col bg-[#0A0A0A] rounded-xl border border-[#232323] overflow-hidden w-40 shrink-0">
-                    <div className="bg-[#141414] border-b border-[#232323] p-3 text-center">
-                      <h3 className="font-bold text-[#FFFFFF] text-xs uppercase tracking-wider truncate" title={day}>{day}</h3>
-                    </div>
-                    <div className="p-2 space-y-2 flex-1 min-h-[120px]">
-                      {calendarDays[day]?.length > 0 ? (
-                        calendarDays[day].map((assignment, idx) => {
-                          const collaborator = team.find(c => c.id === assignment.collaborator_id);
-                          const colorClass = teamColorMap.get(assignment.collaborator_id) || 'bg-gray-500';
-                          return (
-                            <div 
-                              key={`${assignment.shift_id}-${idx}`} 
-                              className={`p-2.5 rounded-lg border-l-4 shadow-sm bg-[#141414] hover:bg-[#1A1A1A] transition-colors relative overflow-hidden`}
-                              style={{ borderLeftColor: 'var(--tw-color)' }}
-                            >
-                              <div className={`absolute left-0 top-0 bottom-0 w-1 ${colorClass}`}></div>
-                              <div className="pl-1">
-                                <p className="text-[10px] font-bold text-[#A1A1A1] mb-0.5">{assignment.start_time.substring(0,5)} - {assignment.end_time.substring(0,5)}</p>
-                                <p className="text-xs font-semibold text-[#FFFFFF] truncate" title={collaborator?.name || 'Vazio'}>
-                                  {collaborator?.name || 'Desconhecido'}
-                                </p>
-                              </div>
-                            </div>
-                          )
-                        })
-                      ) : (
-                        <div className="h-full flex items-center justify-center">
-                          <p className="text-[10px] text-[#A1A1A1]/40 uppercase tracking-widest text-center mt-4">Sem Plantão</p>
-                        </div>
-                      )}
-                    </div>
+            {/* Google Agenda Style Grid */}
+            <div className="overflow-x-auto rounded-xl border border-[#232323] bg-[#232323] shadow-lg">
+              <div className="min-w-[800px] grid grid-cols-7 gap-px bg-[#232323]">
+                {/* Headers */}
+                {daysOfWeek.map(day => (
+                  <div key={day} className="bg-[#141414] p-3 text-center">
+                    <h3 className="font-bold text-[#FFFFFF] text-xs uppercase tracking-wider truncate">{day}</h3>
                   </div>
+                ))}
+                
+                {/* Cells */}
+                {calendarGrid.map((week, wIdx) => (
+                  daysOfWeek.map(day => {
+                    const assignments = week[day];
+                    const isActive = selectedDays.includes(day);
+                    
+                    return (
+                      <div key={`${wIdx}-${day}`} className={`min-h-[140px] p-2 flex flex-col transition-colors ${isActive ? 'bg-[#0A0A0A] hover:bg-[#0A0A0A]/80' : 'bg-[#141414]/50 opacity-50'}`}>
+                        <div className="text-right mb-1">
+                           <span className="text-[10px] font-bold text-[#A1A1A1]/40 uppercase tracking-widest bg-[#141414] px-1.5 py-0.5 rounded">Semana {wIdx + 1}</span>
+                        </div>
+                        <div className="space-y-1.5 flex-1">
+                          {assignments.length > 0 ? (
+                            assignments.map((assignment, aIdx) => {
+                              const collaborator = team.find(c => c.id === assignment.collaborator_id);
+                              const colorClass = teamColorMap.get(assignment.collaborator_id) || 'bg-gray-500';
+                              return (
+                                <div 
+                                  key={`${assignment.shift_id}-${aIdx}`} 
+                                  className={`px-2 py-1.5 rounded text-xs border-l-[3px] shadow-sm bg-[#141414] hover:bg-[#1A1A1A] flex flex-col gap-0.5`}
+                                  style={{ borderLeftColor: 'var(--tw-color)' }}
+                                >
+                                  <div className={`absolute -ml-[3px] top-0 bottom-0 w-[3px] rounded-l ${colorClass}`}></div>
+                                  <span className="font-bold text-[#FFFFFF] truncate leading-none" title={collaborator?.name}>{collaborator?.name || 'Vazio'}</span>
+                                  <span className="text-[10px] font-mono text-[#A1A1A1] leading-none">{assignment.start_time.substring(0,5)} - {assignment.end_time.substring(0,5)}</span>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <div className="h-full min-h-[40px] flex items-center justify-center">
+                               {isActive && <span className="text-[10px] text-[#232323] italic">Livre</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })
                 ))}
               </div>
             </div>
