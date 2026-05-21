@@ -161,7 +161,17 @@ export default function HomePage() {
 
         if (!response.ok) {
           const errData = await response.json();
-          throw new Error(errData.detail || 'Erro ao gerar escala.');
+          let errorMsg = 'Erro ao gerar escala.';
+          if (errData.detail) {
+            if (typeof errData.detail === 'string') {
+              errorMsg = errData.detail;
+            } else if (Array.isArray(errData.detail)) {
+              errorMsg = errData.detail.map((e: any) => e.msg || JSON.stringify(e)).join(', ');
+            } else {
+              errorMsg = JSON.stringify(errData.detail);
+            }
+          }
+          throw new Error(errorMsg);
         }
 
         const data = await response.json();
