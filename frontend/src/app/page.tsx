@@ -1,12 +1,13 @@
 "use client";
 import { useState, useMemo } from "react";
-import { Plus, Trash2, AlertCircle, Home, Calendar } from 'lucide-react';
+import { AlertCircle, Home, Calendar, Users, Clock, CalendarDays } from 'lucide-react';
 
 type Collaborator = {
   id: string;
   name: string;
   role: string;
   block_saturday_1: boolean;
+  estagiario_mode?: string;
 };
 
 type Shift = {
@@ -33,50 +34,33 @@ type ScheduleResult = {
   shift_counts: Record<string, number>;
 };
 
-const defaultShifts: Shift[] = [
-  { id: 'seg1', name: 'Segunda (Turno 1)', start_time: '05:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'seg2', name: 'Segunda (Turno 2)', start_time: '11:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'seg3', name: 'Segunda (Turno 3)', start_time: '17:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'ter1', name: 'Terça (Turno 1)', start_time: '05:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'ter2', name: 'Terça (Turno 2)', start_time: '11:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'ter3', name: 'Terça (Turno 3)', start_time: '17:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'qua1', name: 'Quarta (Turno 1)', start_time: '05:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'qua2', name: 'Quarta (Turno 2)', start_time: '11:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'qua3', name: 'Quarta (Turno 3)', start_time: '17:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'qui1', name: 'Quinta (Turno 1)', start_time: '05:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'qui2', name: 'Quinta (Turno 2)', start_time: '11:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'qui3', name: 'Quinta (Turno 3)', start_time: '17:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'sex1', name: 'Sexta (Turno 1)', start_time: '05:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'sex2', name: 'Sexta (Turno 2)', start_time: '11:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'sex3', name: 'Sexta (Turno 3)', start_time: '17:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 's1', name: 'Sábado 1', start_time: '08:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 's2', name: 'Sábado 2', start_time: '11:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-  { id: 'dom', name: 'Domingo', start_time: '08:00', required_graduados: 1, required_estagiarios: 1, required_recepcao: 1, required_servicos_gerais: 1 },
-];
-
 const PROFESSIONAL_COLORS = [
   'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 
   'bg-indigo-500', 'bg-teal-500', 'bg-rose-500', 'bg-amber-500',
   'bg-cyan-500', 'bg-lime-500', 'bg-fuchsia-500', 'bg-violet-500'
 ];
 
+const daysOfWeek = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
 export default function HomePage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('Professores');
 
-  // Team State
-  const [team, setTeam] = useState<Collaborator[]>([
-    { id: '1', name: 'Prof. Silva', role: 'graduado', block_saturday_1: false },
-    { id: '2', name: 'Prof. Souza', role: 'graduado', block_saturday_1: false },
-    { id: '3', name: 'Est. João', role: 'estagiario', block_saturday_1: false },
-    { id: '4', name: 'Est. Maria', role: 'estagiario', block_saturday_1: false },
-    { id: '5', name: 'Rec. Ana', role: 'recepcao', block_saturday_1: false },
-    { id: '6', name: 'Limp. Carlos', role: 'servicos_gerais', block_saturday_1: false },
-  ]);
+  // Step 1 State
+  const [roleCounts, setRoleCounts] = useState({
+    graduado: 2,
+    estagiario: 1,
+    recepcao: 1,
+    servicos_gerais: 1
+  });
+  const [selectedDays, setSelectedDays] = useState<string[]>(['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']);
 
-  // Shifts State
-  const [shifts, setShifts] = useState<Shift[]>(defaultShifts);
+  // Step 2 State
+  const [team, setTeam] = useState<Collaborator[]>([]);
+
+  // Step 3 State
+  const [shifts, setShifts] = useState<Shift[]>([]);
 
   // Result State
   const [result, setResult] = useState<ScheduleResult | null>(null);
@@ -89,8 +73,94 @@ export default function HomePage() {
     return map;
   }, [team]);
 
+  const toggleDay = (day: string) => {
+    setSelectedDays(prev => 
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
+
+  const updateRoleCount = (role: keyof typeof roleCounts, value: number) => {
+    setRoleCounts(prev => ({ ...prev, [role]: Math.max(0, Math.min(10, value)) }));
+  };
+
+  const generateTeam = () => {
+    let newTeam: Collaborator[] = [];
+    const roles = [
+      { key: 'graduado', label: 'Graduado' },
+      { key: 'estagiario', label: 'Estagiário' },
+      { key: 'recepcao', label: 'Recepção' },
+      { key: 'servicos_gerais', label: 'Serviços Gerais' }
+    ];
+    
+    roles.forEach(r => {
+      const existingOfRole = team.filter(c => c.role === r.key);
+      const count = roleCounts[r.key as keyof typeof roleCounts];
+      for(let i=0; i < count; i++) {
+         if (i < existingOfRole.length) {
+            newTeam.push(existingOfRole[i]);
+         } else {
+            newTeam.push({
+              id: `${r.key}-${Date.now()}-${i}`,
+              name: '',
+              role: r.key,
+              block_saturday_1: false,
+              estagiario_mode: r.key === 'estagiario' ? 'abre' : undefined
+            });
+         }
+      }
+    });
+    setTeam(newTeam);
+  };
+
+  const generateShifts = () => {
+    let newShifts: Shift[] = [];
+    const turnos = [
+       { suffix: '1', name: 'Turno 1', defaultTime: '05:00' },
+       { suffix: '2', name: 'Turno 2', defaultTime: '11:00' },
+       { suffix: '3', name: 'Turno 3', defaultTime: '17:00' },
+    ];
+    
+    // Sort selected days by standard week order
+    const sortedDays = [...selectedDays].sort((a, b) => daysOfWeek.indexOf(a) - daysOfWeek.indexOf(b));
+    
+    sortedDays.forEach(day => {
+       turnos.forEach(t => {
+          const shiftId = `${day}-${t.suffix}`;
+          const existing = shifts.find(s => s.id === shiftId);
+          newShifts.push({
+             id: shiftId,
+             name: `${day} (${t.name})`,
+             start_time: existing ? existing.start_time : t.defaultTime,
+             required_graduados: roleCounts.graduado,
+             required_estagiarios: roleCounts.estagiario,
+             required_recepcao: roleCounts.recepcao,
+             required_servicos_gerais: roleCounts.servicos_gerais
+          });
+       });
+    });
+    setShifts(newShifts);
+  };
+
   const handleNext = async () => {
-    if (step === 2) {
+    if (step === 1) {
+      if (selectedDays.length === 0) {
+        setError("Selecione pelo menos um dia da semana.");
+        return;
+      }
+      setError(null);
+      generateTeam();
+      setStep(2);
+    } else if (step === 2) {
+      // Validate names
+      const emptyNames = team.some(c => c.name.trim() === '');
+      if (emptyNames) {
+        setError("Por favor, preencha o nome de todos os colaboradores.");
+        return;
+      }
+      setError(null);
+      generateShifts();
+      setStep(3);
+    } else if (step === 3) {
       // Generate Schedule
       setError(null);
       try {
@@ -108,12 +178,10 @@ export default function HomePage() {
 
         const data = await response.json();
         setResult(data);
-        setStep(3);
+        setStep(4);
       } catch (err: any) {
         setError(err.message);
       }
-    } else {
-      setStep((s) => s + 1);
     }
   };
 
@@ -126,14 +194,6 @@ export default function HomePage() {
     setStep(1);
     setResult(null);
     setError(null);
-  };
-
-  const addCollaborator = () => {
-    setTeam([...team, { id: Date.now().toString(), name: '', role: 'graduado', block_saturday_1: false }]);
-  };
-
-  const removeCollaborator = (id: string) => {
-    setTeam(team.filter((c) => c.id !== id));
   };
 
   const updateCollaborator = (id: string, field: keyof Collaborator, value: any) => {
@@ -153,9 +213,6 @@ export default function HomePage() {
       return true;
     });
   }, [result?.assignments, activeTab, team]);
-
-  // Calendar logic
-  const daysOfWeek = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
   
   const calendarDays = useMemo(() => {
     const groups: Record<string, ShiftAssignment[]> = {};
@@ -166,7 +223,6 @@ export default function HomePage() {
       if (matchedDay) {
         groups[matchedDay].push(assignment);
       } else {
-        // Fallback para nomes inesperados
         const firstWord = assignment.date.split(' ')[0];
         if (!groups[firstWord]) groups[firstWord] = [];
         groups[firstWord].push(assignment);
@@ -180,6 +236,60 @@ export default function HomePage() {
     return groups;
   }, [filteredAssignments]);
 
+  const renderTeamInputs = (roleKey: string, roleName: string) => {
+    const members = team.filter(c => c.role === roleKey);
+    if (members.length === 0) return null;
+    
+    return (
+      <div className="mb-6 last:mb-0">
+        <h3 className="text-lg font-bold text-[#FF4D1C] mb-3 border-b border-[#232323] pb-2">{roleName} ({members.length})</h3>
+        <div className="space-y-3">
+          {members.map((c, index) => (
+            <div key={c.id} className="flex flex-col md:flex-row items-stretch md:items-center gap-3 p-3 border border-[#232323] bg-[#0A0A0A] rounded-xl">
+              <div className="w-8 h-8 rounded-full bg-[#141414] border border-[#232323] flex items-center justify-center font-bold text-xs text-[#A1A1A1] shrink-0">
+                {index + 1}
+              </div>
+              <input
+                type="text"
+                value={c.name}
+                onChange={(e) => updateCollaborator(c.id, 'name', e.target.value)}
+                placeholder={`Nome do ${roleName}`}
+                className="flex-1 p-2.5 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none"
+              />
+              
+              {roleKey === 'estagiario' && (
+                <div className="flex bg-[#141414] rounded-lg border border-[#232323] overflow-hidden shrink-0">
+                  <button
+                    onClick={() => updateCollaborator(c.id, 'estagiario_mode', 'abre')}
+                    className={`px-3 py-2 text-xs font-bold transition-colors ${c.estagiario_mode === 'abre' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
+                  >
+                    Abre
+                  </button>
+                  <button
+                    onClick={() => updateCollaborator(c.id, 'estagiario_mode', 'fecha')}
+                    className={`px-3 py-2 text-xs font-bold transition-colors ${c.estagiario_mode === 'fecha' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
+                  >
+                    Fecha
+                  </button>
+                </div>
+              )}
+              
+              <label className="flex items-center gap-2 cursor-pointer bg-[#141414] px-3 py-2.5 border border-[#232323] rounded-lg shrink-0">
+                <input
+                  type="checkbox"
+                  checked={c.block_saturday_1}
+                  onChange={(e) => updateCollaborator(c.id, 'block_saturday_1', e.target.checked)}
+                  className="w-4 h-4 text-[#FF4D1C] rounded border-[#232323] bg-[#0A0A0A] focus:ring-[#FF6B3D] focus:ring-offset-[#141414]"
+                />
+                <span className="text-xs font-medium text-[#A1A1A1]">Bloquear Sáb 1 (*)</span>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <main className="min-h-screen bg-[#0A0A0A] flex items-start sm:items-center justify-center p-4 sm:p-6 md:p-8 font-sans text-[#FFFFFF]">
       <div className="bg-[#141414] border border-[#232323] rounded-2xl shadow-2xl p-6 sm:p-8 max-w-6xl w-full">
@@ -187,14 +297,14 @@ export default function HomePage() {
           Escala Certa<span className="text-[#FF4D1C]">.net</span>
         </h1>
 
-        {/* Wizard Progress - Responsive Wrap */}
+        {/* Wizard Progress */}
         <div className="flex flex-wrap justify-between sm:justify-center items-center mb-8 border-b border-[#232323] pb-6 gap-2 sm:gap-0">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4].map((i) => (
             <div key={i} className="flex items-center">
               <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm transition-colors duration-300 ${step >= i ? 'bg-[#FF4D1C] text-[#FFFFFF] shadow-[0_0_10px_#FF6B3D]' : 'bg-[#0A0A0A] border border-[#232323] text-[#A1A1A1]'}`}>
                 {i}
               </div>
-              {i < 3 && <div className={`hidden sm:block w-12 md:w-24 h-1 mx-2 transition-colors duration-300 ${step > i ? 'bg-[#FF4D1C]' : 'bg-[#232323]'}`}></div>}
+              {i < 4 && <div className={`hidden sm:block w-8 md:w-16 h-1 mx-2 transition-colors duration-300 ${step > i ? 'bg-[#FF4D1C]' : 'bg-[#232323]'}`}></div>}
             </div>
           ))}
         </div>
@@ -206,126 +316,139 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Step 1 */}
+        {/* Step 1: Configuração Quantitativa e Dias */}
         {step === 1 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF]">1. Equipe e Restrições</h2>
-                <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Regra do Asterisco (*): Marque quem não pode no Sábado 1.</p>
-              </div>
-              <button onClick={addCollaborator} className="flex items-center gap-2 bg-[#FF4D1C] text-[#FFFFFF] px-4 py-2 rounded-lg hover:bg-[#FF6B3D] transition shadow-[0_0_10px_rgba(255,107,61,0.2)] w-full sm:w-auto justify-center">
-                <Plus size={18} /> Adicionar
-              </button>
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2 mb-2">
+                <Users className="text-[#FF4D1C]" />
+                1. Quantidade de Colaboradores
+              </h2>
+              <p className="text-sm text-[#A1A1A1]">Quantas pessoas de cada função farão parte desta escala?</p>
             </div>
-
-            <div className="space-y-3">
-              {team.map((c) => (
-                <div key={c.id} className="flex flex-col md:flex-row items-stretch md:items-center gap-3 p-4 border border-[#232323] bg-[#0A0A0A] rounded-xl">
-                  <input
-                    type="text"
-                    value={c.name}
-                    onChange={(e) => updateCollaborator(c.id, 'name', e.target.value)}
-                    placeholder="Nome do Colaborador"
-                    className="flex-1 p-2.5 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none"
-                  />
-                  <select
-                    value={c.role}
-                    onChange={(e) => updateCollaborator(c.id, 'role', e.target.value)}
-                    className="p-2.5 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none"
-                  >
-                    <option value="graduado">Professor - Graduado (6h)</option>
-                    <option value="estagiario">Professor - Estagiário (5h)</option>
-                    <option value="recepcao">Recepção (6h)</option>
-                    <option value="servicos_gerais">Limpeza/Serviços Gerais (6h)</option>
-                  </select>
-                  <label className="flex items-center gap-2 cursor-pointer bg-[#141414] px-3 py-2.5 border border-[#232323] rounded-lg">
-                    <input
-                      type="checkbox"
-                      checked={c.block_saturday_1}
-                      onChange={(e) => updateCollaborator(c.id, 'block_saturday_1', e.target.checked)}
-                      className="w-4 h-4 text-[#FF4D1C] rounded border-[#232323] bg-[#0A0A0A] focus:ring-[#FF6B3D] focus:ring-offset-[#141414]"
-                    />
-                    <span className="text-sm font-medium text-[#A1A1A1]">Bloquear Sáb 1 (*)</span>
-                  </label>
-                  <button onClick={() => removeCollaborator(c.id)} className="p-2.5 text-red-500 hover:bg-red-950/30 border border-transparent hover:border-red-900/30 rounded-lg transition flex justify-center">
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2 */}
-        {step === 2 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF]">2. Configuração de Horários</h2>
-            <p className="text-sm sm:text-base text-[#A1A1A1]">Defina os inícios por dia. Os términos são somados por função (Ex: Graduado +6h).</p>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {shifts.map((s) => (
-                <div key={s.id} className="flex flex-col gap-3 p-4 border border-[#232323] bg-[#0A0A0A] rounded-xl">
-                  <div className="font-bold text-[#FFFFFF] text-sm truncate">{s.name}</div>
-                  <div className="grid grid-cols-5 gap-2">
-                    <div>
-                      <label className="text-[10px] font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block truncate">Início</label>
-                      <input
-                        type="time"
-                        value={s.start_time}
-                        onChange={(e) => updateShift(s.id, 'start_time', e.target.value)}
-                        className="p-2 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-[10px] sm:text-xs focus:ring-2 focus:ring-[#FF6B3D] outline-none w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block truncate" title="Graduados">Grad.</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={s.required_graduados}
-                        onChange={(e) => updateShift(s.id, 'required_graduados', parseInt(e.target.value) || 0)}
-                        className="p-2 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-[10px] sm:text-xs focus:ring-2 focus:ring-[#FF6B3D] outline-none w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block truncate" title="Estagiários">Estag.</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={s.required_estagiarios}
-                        onChange={(e) => updateShift(s.id, 'required_estagiarios', parseInt(e.target.value) || 0)}
-                        className="p-2 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-[10px] sm:text-xs focus:ring-2 focus:ring-[#FF6B3D] outline-none w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block truncate" title="Recepção">Recep.</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={s.required_recepcao}
-                        onChange={(e) => updateShift(s.id, 'required_recepcao', parseInt(e.target.value) || 0)}
-                        className="p-2 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-[10px] sm:text-xs focus:ring-2 focus:ring-[#FF6B3D] outline-none w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block truncate" title="Limpeza">Limp.</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={s.required_servicos_gerais}
-                        onChange={(e) => updateShift(s.id, 'required_servicos_gerais', parseInt(e.target.value) || 0)}
-                        className="p-2 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-[10px] sm:text-xs focus:ring-2 focus:ring-[#FF6B3D] outline-none w-full"
-                      />
-                    </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { key: 'graduado', label: 'Graduados' },
+                { key: 'estagiario', label: 'Estagiários' },
+                { key: 'recepcao', label: 'Recepção' },
+                { key: 'servicos_gerais', label: 'Limpeza' }
+              ].map(role => (
+                <div key={role.key} className="bg-[#0A0A0A] border border-[#232323] p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                  <span className="text-sm font-semibold text-[#A1A1A1] mb-3 uppercase tracking-wider">{role.label}</span>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => updateRoleCount(role.key as keyof typeof roleCounts, roleCounts[role.key as keyof typeof roleCounts] - 1)}
+                      className="w-8 h-8 rounded-lg bg-[#141414] border border-[#232323] text-[#FFFFFF] hover:bg-[#232323] hover:text-[#FF4D1C] font-bold flex items-center justify-center"
+                    >-</button>
+                    <span className="text-2xl font-bold w-6">{roleCounts[role.key as keyof typeof roleCounts]}</span>
+                    <button 
+                      onClick={() => updateRoleCount(role.key as keyof typeof roleCounts, roleCounts[role.key as keyof typeof roleCounts] + 1)}
+                      className="w-8 h-8 rounded-lg bg-[#141414] border border-[#232323] text-[#FFFFFF] hover:bg-[#232323] hover:text-[#FF4D1C] font-bold flex items-center justify-center"
+                    >+</button>
                   </div>
                 </div>
               ))}
             </div>
+
+            <div className="pt-4 border-t border-[#232323]">
+              <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2 mb-2">
+                <CalendarDays className="text-[#FF4D1C]" />
+                Dias da Semana
+              </h2>
+              <p className="text-sm text-[#A1A1A1] mb-4">Selecione os dias em que haverá expediente na clínica.</p>
+              
+              <div className="flex flex-wrap gap-3">
+                {daysOfWeek.map(day => (
+                  <button
+                    key={day}
+                    onClick={() => toggleDay(day)}
+                    className={`px-4 py-2 rounded-lg font-bold text-sm transition-all border ${
+                      selectedDays.includes(day)
+                        ? 'bg-[#FF4D1C] text-[#FFFFFF] border-[#FF4D1C] shadow-[0_0_10px_rgba(255,107,61,0.2)]'
+                        : 'bg-[#0A0A0A] text-[#A1A1A1] border-[#232323] hover:border-[#FF4D1C]/50'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Step 3 - CALENDAR VIEW */}
-        {step === 3 && result && (
+        {/* Step 2: Identificação dos Colaboradores */}
+        {step === 2 && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF]">2. Identificação da Equipe</h2>
+              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Digite o nome dos colaboradores nas categorias que você definiu.</p>
+            </div>
+
+            <div className="bg-[#141414] rounded-xl">
+              {renderTeamInputs('graduado', 'Professores Graduados')}
+              {renderTeamInputs('estagiario', 'Professores Estagiários')}
+              {renderTeamInputs('recepcao', 'Recepção')}
+              {renderTeamInputs('servicos_gerais', 'Limpeza / Serviços Gerais')}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Turnos */}
+        {step === 3 && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2">
+                <Clock className="text-[#FF4D1C]" />
+                3. Configuração de Turnos
+              </h2>
+              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Defina o horário de INÍCIO de cada turno. A carga horária (6h graduado, 5h estagiário) é calculada automaticamente.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {shifts.map((s) => (
+                <div key={s.id} className="flex flex-col gap-3 p-4 border border-[#232323] bg-[#0A0A0A] rounded-xl">
+                  <div className="font-bold text-[#FFFFFF] text-sm">{s.name}</div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block">Início do Turno</label>
+                    <input
+                      type="time"
+                      value={s.start_time}
+                      onChange={(e) => updateShift(s.id, 'start_time', e.target.value)}
+                      className="p-2.5 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none w-full font-mono"
+                    />
+                  </div>
+                  
+                  {/* Opção avançada - caso queira mudar os requirements neste turno */}
+                  <details className="mt-2 text-xs">
+                    <summary className="text-[#A1A1A1] cursor-pointer hover:text-[#FFFFFF] select-none">Ajustar Quantidades deste Turno</summary>
+                    <div className="mt-3 grid grid-cols-2 gap-2 p-3 bg-[#141414] rounded-lg border border-[#232323]">
+                      <div>
+                        <label className="text-[10px] text-[#A1A1A1] uppercase">Grad.</label>
+                        <input type="number" min="0" value={s.required_graduados} onChange={(e) => updateShift(s.id, 'required_graduados', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#A1A1A1] uppercase">Estag.</label>
+                        <input type="number" min="0" value={s.required_estagiarios} onChange={(e) => updateShift(s.id, 'required_estagiarios', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#A1A1A1] uppercase">Recep.</label>
+                        <input type="number" min="0" value={s.required_recepcao} onChange={(e) => updateShift(s.id, 'required_recepcao', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#A1A1A1] uppercase">Limp.</label>
+                        <input type="number" min="0" value={s.required_servicos_gerais} onChange={(e) => updateShift(s.id, 'required_servicos_gerais', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 - CALENDAR VIEW */}
+        {step === 4 && result && (
           <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
               <div>
@@ -442,7 +565,7 @@ export default function HomePage() {
 
         {/* Navigation Buttons */}
         <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row justify-between border-t border-[#232323] pt-6 gap-4">
-          {step > 1 && step < 3 && (
+          {step > 1 && step < 4 && (
             <button 
               onClick={handleBack} 
               className="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-[#A1A1A1] bg-[#0A0A0A] border border-[#232323] hover:bg-[#232323] transition-colors text-sm sm:text-base order-2 sm:order-1"
@@ -452,14 +575,14 @@ export default function HomePage() {
           )}
           {step === 1 && <div className="hidden sm:block"></div>}
           
-          {step < 3 && (
+          {step < 4 && (
             <button 
               onClick={handleNext} 
               className={`w-full sm:w-auto px-8 py-3 rounded-xl font-bold text-[#FFFFFF] transition-all text-sm sm:text-base order-1 sm:order-2 ${
                 'bg-[#FF4D1C] hover:bg-[#FF6B3D] shadow-[0_0_15px_rgba(255,107,61,0.2)] hover:shadow-[0_0_20px_rgba(255,107,61,0.4)]'
               }`}
             >
-              {step === 2 ? 'Gerar Calendário' : 'Avançar'}
+              {step === 3 ? 'Gerar Calendário' : 'Avançar'}
             </button>
           )}
         </div>

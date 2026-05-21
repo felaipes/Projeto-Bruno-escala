@@ -65,7 +65,14 @@ class SchedulingEngine:
             
             for c in available_estagiarios:
                 if assigned_estagiarios < shift.required_estagiarios:
-                    assignments.append(ShiftAssignment(shift_id=shift.id, collaborator_id=c.id, date=shift.name, start_time=shift.start_time, end_time=calculate_end_time(shift.start_time, 5)))
+                    if c.estagiario_mode == 'fecha':
+                        st = calculate_end_time(shift.start_time, 1) # Entra 1h depois
+                        et = calculate_end_time(shift.start_time, 6) # Sai com os outros
+                    else: # 'abre' ou default
+                        st = shift.start_time # Entra com os outros
+                        et = calculate_end_time(shift.start_time, 5) # Sai 1h antes
+                        
+                    assignments.append(ShiftAssignment(shift_id=shift.id, collaborator_id=c.id, date=shift.name, start_time=st, end_time=et))
                     shift_counts[c.id] += 1
                     assigned_estagiarios += 1
                     

@@ -7,6 +7,7 @@ class Collaborator(BaseModel):
     name: str
     role: str  # 'graduado', 'estagiario', 'recepcao', 'servicos_gerais'
     block_saturday_1: bool = False
+    estagiario_mode: str = 'abre'  # 'abre' ou 'fecha'
 
 class Shift(BaseModel):
     id: str
