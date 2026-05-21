@@ -34,25 +34,65 @@ class SchedulingEngine:
              raise ValueError("100% da equipe de estagiários está bloqueada para o Sábado 1.")
 
     def generate_schedule(self) -> ScheduleResult:
-        """
-        Gera a escala unificada para todos (Graduados, Estagiários, Recepção, Limpeza)
-        """
         assignments = []
         unfilled = []
-        
-        # O Motor de Geração foca em distribuir com equilíbrio:
         shift_counts = {c.id: 0 for c in self.collaborators}
+        weekend_counts = {c.id: 0 for c in self.collaborators}
         
+        # Identificar primeiro e último turno de cada dia (agrupado por tudo antes do último hífen)
+        daily_shifts = {}
+        for s in self.shifts:
+            group = s.id.rsplit('-', 1)[0]
+            if group not in daily_shifts:
+                daily_shifts[group] = []
+            daily_shifts[group].append(s)
+            
+        first_shifts = set()
+        last_shifts = set()
+        for group, s_list in daily_shifts.items():
+            s_list.sort(key=lambda x: x.start_time)
+            if s_list:
+                first_shifts.add(s_list[0].id)
+                last_shifts.add(s_list[-1].id)
+
         for shift in self.shifts:
+            is_weekend = 'Sábado' in shift.name or 'Domingo' in shift.name
+            is_first = shift.id in first_shifts
+            is_last = shift.id in last_shifts
+            
             # 1. Assinar Graduados
             assigned_graduados = 0
-            available_graduados = [c for c in self.collaborators if c.role == 'graduado' and not (shift.name == 'Sábado 1' and c.block_saturday_1)]
-            available_graduados.sort(key=lambda x: shift_counts[x.id])
+            available_graduados = [c for c in self.collaborators if c.role == 'graduado' and not ('Sábado (Semana 1)' in shift.name and c.block_saturday_1)]
+            
+            # Ordenar graduados:
+            # - Se for fim de semana, priorizar quem tem menos finais de semana (weekend_counts).
+            # - Depois, priorizar quem tem menos turnos no total (shift_counts).
+            # - Se for o primeiro turno do dia, forçar "abre" para o início da fila se possível.
+            # - Se for o último turno do dia, forçar "fecha" para o início da fila se possível.
+            
+            def graduado_sort_key(c):
+                # Penalty para forçar opener/closer
+                penalty = 0
+                if is_first and c.professor_mode == 'abre':
+                    penalty = -1000
+                elif is_last and c.professor_mode == 'fecha':
+                    penalty = -1000
+                elif c.professor_mode == 'abre' and not is_first:
+                    penalty = 1000 # Evitar escalar opener em turnos que não abrem (se possível)
+                elif c.professor_mode == 'fecha' and not is_last:
+                    penalty = 1000 # Evitar escalar closer em turnos que não fecham (se possível)
+                    
+                w_count = weekend_counts[c.id] if is_weekend else 0
+                return (w_count, penalty, shift_counts[c.id])
+                
+            available_graduados.sort(key=graduado_sort_key)
             
             for c in available_graduados:
                 if assigned_graduados < shift.required_graduados:
                     assignments.append(ShiftAssignment(shift_id=shift.id, collaborator_id=c.id, date=shift.name, start_time=shift.start_time, end_time=calculate_end_time(shift.start_time, 6)))
                     shift_counts[c.id] += 1
+                    if is_weekend:
+                        weekend_counts[c.id] += 1
                     assigned_graduados += 1
                     
             if assigned_graduados < shift.required_graduados:
@@ -60,20 +100,23 @@ class SchedulingEngine:
                 
             # 2. Assinar Estagiários
             assigned_estagiarios = 0
-            available_estagiarios = [c for c in self.collaborators if c.role == 'estagiario' and not (shift.name == 'Sábado 1' and c.block_saturday_1)]
-            available_estagiarios.sort(key=lambda x: shift_counts[x.id])
+            available_estagiarios = [c for c in self.collaborators if c.role == 'estagiario' and not ('Sábado (Semana 1)' in shift.name and c.block_saturday_1)]
+            
+            def estagiario_sort_key(c):
+                w_count = weekend_counts[c.id] if is_weekend else 0
+                return (w_count, shift_counts[c.id])
+                
+            available_estagiarios.sort(key=estagiario_sort_key)
             
             for c in available_estagiarios:
                 if assigned_estagiarios < shift.required_estagiarios:
-                    if c.estagiario_mode == 'fecha':
-                        st = calculate_end_time(shift.start_time, 1) # Entra 1h depois
-                        et = calculate_end_time(shift.start_time, 6) # Sai com os outros
-                    else: # 'abre' ou default
-                        st = shift.start_time # Entra com os outros
-                        et = calculate_end_time(shift.start_time, 5) # Sai 1h antes
+                    st = shift.start_time
+                    et = calculate_end_time(shift.start_time, 5) # Sempre 5 horas normais
                         
                     assignments.append(ShiftAssignment(shift_id=shift.id, collaborator_id=c.id, date=shift.name, start_time=st, end_time=et))
                     shift_counts[c.id] += 1
+                    if is_weekend:
+                        weekend_counts[c.id] += 1
                     assigned_estagiarios += 1
                     
             if assigned_estagiarios < shift.required_estagiarios:
@@ -81,13 +124,19 @@ class SchedulingEngine:
 
             # 3. Assinar Recepção
             assigned_recepcao = 0
-            available_recepcao = [c for c in self.collaborators if c.role == 'recepcao' and not (shift.name == 'Sábado 1' and c.block_saturday_1)]
-            available_recepcao.sort(key=lambda x: shift_counts[x.id])
+            available_recepcao = [c for c in self.collaborators if c.role == 'recepcao' and not ('Sábado (Semana 1)' in shift.name and c.block_saturday_1)]
+            
+            def recepcao_sort_key(c):
+                w_count = weekend_counts[c.id] if is_weekend else 0
+                return (w_count, shift_counts[c.id])
+            available_recepcao.sort(key=recepcao_sort_key)
             
             for c in available_recepcao:
                 if assigned_recepcao < shift.required_recepcao:
                     assignments.append(ShiftAssignment(shift_id=shift.id, collaborator_id=c.id, date=shift.name, start_time=shift.start_time, end_time=calculate_end_time(shift.start_time, 6)))
                     shift_counts[c.id] += 1
+                    if is_weekend:
+                        weekend_counts[c.id] += 1
                     assigned_recepcao += 1
                     
             if assigned_recepcao < shift.required_recepcao:
@@ -95,13 +144,19 @@ class SchedulingEngine:
 
             # 4. Assinar Limpeza (Serviços Gerais)
             assigned_servicos = 0
-            available_servicos = [c for c in self.collaborators if c.role == 'servicos_gerais' and not (shift.name == 'Sábado 1' and c.block_saturday_1)]
-            available_servicos.sort(key=lambda x: shift_counts[x.id])
+            available_servicos = [c for c in self.collaborators if c.role == 'servicos_gerais' and not ('Sábado (Semana 1)' in shift.name and c.block_saturday_1)]
+            
+            def servicos_sort_key(c):
+                w_count = weekend_counts[c.id] if is_weekend else 0
+                return (w_count, shift_counts[c.id])
+            available_servicos.sort(key=servicos_sort_key)
             
             for c in available_servicos:
                 if assigned_servicos < shift.required_servicos_gerais:
                     assignments.append(ShiftAssignment(shift_id=shift.id, collaborator_id=c.id, date=shift.name, start_time=shift.start_time, end_time=calculate_end_time(shift.start_time, 6)))
                     shift_counts[c.id] += 1
+                    if is_weekend:
+                        weekend_counts[c.id] += 1
                     assigned_servicos += 1
                     
             if assigned_servicos < shift.required_servicos_gerais:

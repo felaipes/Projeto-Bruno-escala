@@ -7,7 +7,7 @@ type Collaborator = {
   name: string;
   role: string;
   block_saturday_1: boolean;
-  estagiario_mode?: string;
+  professor_mode?: string;
 };
 
 type Shift = {
@@ -80,7 +80,7 @@ export default function HomePage() {
   };
 
   const updateRoleCount = (role: keyof typeof roleCounts, value: number) => {
-    setRoleCounts(prev => ({ ...prev, [role]: Math.max(0, Math.min(10, value)) }));
+    setRoleCounts(prev => ({ ...prev, [role]: Math.max(0, Math.min(20, value)) }));
   };
 
   const generateTeam = () => {
@@ -104,7 +104,7 @@ export default function HomePage() {
               name: '',
               role: r.key,
               block_saturday_1: false,
-              estagiario_mode: r.key === 'estagiario' ? 'abre' : undefined
+              professor_mode: r.key === 'graduado' ? 'nenhum' : undefined
             });
          }
       }
@@ -124,18 +124,26 @@ export default function HomePage() {
     const sortedDays = [...selectedDays].sort((a, b) => daysOfWeek.indexOf(a) - daysOfWeek.indexOf(b));
     
     sortedDays.forEach(day => {
-       turnos.forEach(t => {
-          const shiftId = `${day}-${t.suffix}`;
-          const existing = shifts.find(s => s.id === shiftId);
-          newShifts.push({
-             id: shiftId,
-             name: `${day} (${t.name})`,
-             start_time: existing ? existing.start_time : t.defaultTime,
-             required_graduados: roleCounts.graduado,
-             required_estagiarios: roleCounts.estagiario,
-             required_recepcao: roleCounts.recepcao,
-             required_servicos_gerais: roleCounts.servicos_gerais
-          });
+       const isWeekend = day === 'Sábado' || day === 'Domingo';
+       const weeks = isWeekend ? [1, 2, 3, 4] : [1];
+       
+       weeks.forEach(week => {
+           const dayPrefix = isWeekend ? `${day} (Semana ${week})` : day;
+           const dayIdPrefix = isWeekend ? `${day}-Semana${week}` : day;
+           
+           turnos.forEach(t => {
+              const shiftId = `${dayIdPrefix}-${t.suffix}`;
+              const existing = shifts.find(s => s.id === shiftId);
+              newShifts.push({
+                 id: shiftId,
+                 name: `${dayPrefix} - ${t.name}`,
+                 start_time: existing ? existing.start_time : t.defaultTime,
+                 required_graduados: roleCounts.graduado,
+                 required_estagiarios: roleCounts.estagiario,
+                 required_recepcao: roleCounts.recepcao,
+                 required_servicos_gerais: roleCounts.servicos_gerais
+              });
+           });
        });
     });
     setShifts(newShifts);
@@ -216,14 +224,24 @@ export default function HomePage() {
   
   const calendarDays = useMemo(() => {
     const groups: Record<string, ShiftAssignment[]> = {};
-    daysOfWeek.forEach(d => groups[d] = []);
+    const dayGroups = [...daysOfWeek];
+    
+    // Expand weekends in calendar columns
+    if (selectedDays.includes('Sábado')) {
+        dayGroups.push('Sábado (Semana 1)', 'Sábado (Semana 2)', 'Sábado (Semana 3)', 'Sábado (Semana 4)');
+    }
+    if (selectedDays.includes('Domingo')) {
+        dayGroups.push('Domingo (Semana 1)', 'Domingo (Semana 2)', 'Domingo (Semana 3)', 'Domingo (Semana 4)');
+    }
+    
+    dayGroups.forEach(d => groups[d] = []);
 
     filteredAssignments.forEach(assignment => {
-      const matchedDay = daysOfWeek.find(d => assignment.date.startsWith(d));
-      if (matchedDay) {
-        groups[matchedDay].push(assignment);
+      const dateKey = assignment.date.split(' - ')[0]; // Gets e.g. "Sábado (Semana 1)" or "Segunda"
+      if (groups[dateKey]) {
+        groups[dateKey].push(assignment);
       } else {
-        const firstWord = assignment.date.split(' ')[0];
+        const firstWord = dateKey.split(' ')[0];
         if (!groups[firstWord]) groups[firstWord] = [];
         groups[firstWord].push(assignment);
       }
@@ -234,7 +252,7 @@ export default function HomePage() {
     });
 
     return groups;
-  }, [filteredAssignments]);
+  }, [filteredAssignments, selectedDays]);
 
   const renderTeamInputs = (roleKey: string, roleName: string) => {
     const members = team.filter(c => c.role === roleKey);
@@ -257,19 +275,25 @@ export default function HomePage() {
                 className="flex-1 p-2.5 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none"
               />
               
-              {roleKey === 'estagiario' && (
+              {roleKey === 'graduado' && (
                 <div className="flex bg-[#141414] rounded-lg border border-[#232323] overflow-hidden shrink-0">
                   <button
-                    onClick={() => updateCollaborator(c.id, 'estagiario_mode', 'abre')}
-                    className={`px-3 py-2 text-xs font-bold transition-colors ${c.estagiario_mode === 'abre' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
+                    onClick={() => updateCollaborator(c.id, 'professor_mode', 'nenhum')}
+                    className={`px-3 py-2 text-[10px] sm:text-xs font-bold transition-colors ${c.professor_mode === 'nenhum' || !c.professor_mode ? 'bg-[#232323] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
                   >
-                    Abre
+                    Qualquer
                   </button>
                   <button
-                    onClick={() => updateCollaborator(c.id, 'estagiario_mode', 'fecha')}
-                    className={`px-3 py-2 text-xs font-bold transition-colors ${c.estagiario_mode === 'fecha' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
+                    onClick={() => updateCollaborator(c.id, 'professor_mode', 'abre')}
+                    className={`px-3 py-2 text-[10px] sm:text-xs font-bold transition-colors ${c.professor_mode === 'abre' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
                   >
-                    Fecha
+                    Abre (Cedo)
+                  </button>
+                  <button
+                    onClick={() => updateCollaborator(c.id, 'professor_mode', 'fecha')}
+                    className={`px-3 py-2 text-[10px] sm:text-xs font-bold transition-colors ${c.professor_mode === 'fecha' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
+                  >
+                    Fecha (Tarde)
                   </button>
                 </div>
               )}
@@ -292,7 +316,7 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] flex items-start sm:items-center justify-center p-4 sm:p-6 md:p-8 font-sans text-[#FFFFFF]">
-      <div className="bg-[#141414] border border-[#232323] rounded-2xl shadow-2xl p-6 sm:p-8 max-w-6xl w-full">
+      <div className="bg-[#141414] border border-[#232323] rounded-2xl shadow-2xl p-6 sm:p-8 max-w-[1400px] w-full">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-[#FFFFFF] mb-6 sm:mb-8 text-center tracking-tight">
           Escala Certa<span className="text-[#FF4D1C]">.net</span>
         </h1>
@@ -318,7 +342,7 @@ export default function HomePage() {
 
         {/* Step 1: Configuração Quantitativa e Dias */}
         {step === 1 && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2 mb-2">
                 <Users className="text-[#FF4D1C]" />
@@ -356,7 +380,7 @@ export default function HomePage() {
                 <CalendarDays className="text-[#FF4D1C]" />
                 Dias da Semana
               </h2>
-              <p className="text-sm text-[#A1A1A1] mb-4">Selecione os dias em que haverá expediente na clínica.</p>
+              <p className="text-sm text-[#A1A1A1] mb-4">Selecione os dias de expediente. Sábados e Domingos geram 4 finais de semana para rodízio automático.</p>
               
               <div className="flex flex-wrap gap-3">
                 {daysOfWeek.map(day => (
@@ -379,10 +403,10 @@ export default function HomePage() {
 
         {/* Step 2: Identificação dos Colaboradores */}
         {step === 2 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF]">2. Identificação da Equipe</h2>
-              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Digite o nome dos colaboradores nas categorias que você definiu.</p>
+              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Marque quais professores abrem (primeiro turno) e fecham (último turno).</p>
             </div>
 
             <div className="bg-[#141414] rounded-xl">
@@ -396,19 +420,19 @@ export default function HomePage() {
 
         {/* Step 3: Turnos */}
         {step === 3 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2">
                 <Clock className="text-[#FF4D1C]" />
                 3. Configuração de Turnos
               </h2>
-              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Defina o horário de INÍCIO de cada turno. A carga horária (6h graduado, 5h estagiário) é calculada automaticamente.</p>
+              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Defina o início de cada turno. Finais de semana foram multiplicados por 4 semanas para o rodízio.</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {shifts.map((s) => (
                 <div key={s.id} className="flex flex-col gap-3 p-4 border border-[#232323] bg-[#0A0A0A] rounded-xl">
-                  <div className="font-bold text-[#FFFFFF] text-sm">{s.name}</div>
+                  <div className="font-bold text-[#FFFFFF] text-sm truncate" title={s.name}>{s.name}</div>
                   <div>
                     <label className="text-xs font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block">Início do Turno</label>
                     <input
@@ -419,7 +443,7 @@ export default function HomePage() {
                     />
                   </div>
                   
-                  {/* Opção avançada - caso queira mudar os requirements neste turno */}
+                  {/* Opção avançada */}
                   <details className="mt-2 text-xs">
                     <summary className="text-[#A1A1A1] cursor-pointer hover:text-[#FFFFFF] select-none">Ajustar Quantidades deste Turno</summary>
                     <div className="mt-3 grid grid-cols-2 gap-2 p-3 bg-[#141414] rounded-lg border border-[#232323]">
@@ -517,42 +541,43 @@ export default function HomePage() {
             )}
 
             {/* Google Agenda Style Calendar Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3">
-              {daysOfWeek.map(day => (
-                <div key={day} className="flex flex-col bg-[#0A0A0A] rounded-xl border border-[#232323] overflow-hidden">
-                  <div className="bg-[#141414] border-b border-[#232323] p-3 text-center">
-                    <h3 className="font-bold text-[#FFFFFF] text-sm uppercase tracking-wider">{day}</h3>
-                  </div>
-                  <div className="p-2 space-y-2 flex-1 min-h-[120px]">
-                    {calendarDays[day]?.length > 0 ? (
-                      calendarDays[day].map((assignment, idx) => {
-                        const collaborator = team.find(c => c.id === assignment.collaborator_id);
-                        const colorClass = teamColorMap.get(assignment.collaborator_id) || 'bg-gray-500';
-                        return (
-                          <div 
-                            key={`${assignment.shift_id}-${idx}`} 
-                            className={`p-2.5 rounded-lg border-l-4 shadow-sm bg-[#141414] hover:bg-[#1A1A1A] transition-colors relative overflow-hidden`}
-                            style={{ borderLeftColor: 'var(--tw-color)' }}
-                          >
-                            {/* Color Bar / Accent */}
-                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${colorClass}`}></div>
-                            <div className="pl-1">
-                              <p className="text-[10px] font-bold text-[#A1A1A1] mb-0.5">{assignment.start_time} - {assignment.end_time}</p>
-                              <p className="text-xs font-semibold text-[#FFFFFF] truncate" title={collaborator?.name || 'Vazio'}>
-                                {collaborator?.name || 'Desconhecido'}
-                              </p>
+            <div className="flex overflow-x-auto pb-4 hide-scrollbar">
+              <div className="flex gap-3 min-w-max">
+                {Object.keys(calendarDays).filter(day => calendarDays[day]?.length > 0 || !day.includes('Semana')).map(day => (
+                  <div key={day} className="flex flex-col bg-[#0A0A0A] rounded-xl border border-[#232323] overflow-hidden w-40 shrink-0">
+                    <div className="bg-[#141414] border-b border-[#232323] p-3 text-center">
+                      <h3 className="font-bold text-[#FFFFFF] text-xs uppercase tracking-wider truncate" title={day}>{day}</h3>
+                    </div>
+                    <div className="p-2 space-y-2 flex-1 min-h-[120px]">
+                      {calendarDays[day]?.length > 0 ? (
+                        calendarDays[day].map((assignment, idx) => {
+                          const collaborator = team.find(c => c.id === assignment.collaborator_id);
+                          const colorClass = teamColorMap.get(assignment.collaborator_id) || 'bg-gray-500';
+                          return (
+                            <div 
+                              key={`${assignment.shift_id}-${idx}`} 
+                              className={`p-2.5 rounded-lg border-l-4 shadow-sm bg-[#141414] hover:bg-[#1A1A1A] transition-colors relative overflow-hidden`}
+                              style={{ borderLeftColor: 'var(--tw-color)' }}
+                            >
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 ${colorClass}`}></div>
+                              <div className="pl-1">
+                                <p className="text-[10px] font-bold text-[#A1A1A1] mb-0.5">{assignment.start_time.substring(0,5)} - {assignment.end_time.substring(0,5)}</p>
+                                <p className="text-xs font-semibold text-[#FFFFFF] truncate" title={collaborator?.name || 'Vazio'}>
+                                  {collaborator?.name || 'Desconhecido'}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="h-full flex items-center justify-center">
-                        <p className="text-[10px] text-[#A1A1A1]/40 uppercase tracking-widest">Sem Plantão</p>
-                      </div>
-                    )}
+                          )
+                        })
+                      ) : (
+                        <div className="h-full flex items-center justify-center">
+                          <p className="text-[10px] text-[#A1A1A1]/40 uppercase tracking-widest text-center mt-4">Sem Plantão</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
             
             {filteredAssignments.length === 0 && (
