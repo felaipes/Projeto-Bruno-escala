@@ -94,7 +94,8 @@ export default function HomePage() {
       // Generate Schedule
       setError(null);
       try {
-        const response = await fetch('/api/schedule', {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://projeto-bruno-escala.onrender.com';
+        const response = await fetch(`${API_URL}/api/schedule/type-1`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ collaborators: team, shifts }),
