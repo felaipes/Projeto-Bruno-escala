@@ -13,8 +13,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/api/schedule/type-1", response_model=ScheduleResult)
-def generate_type_1(request: ScheduleRequest):
+@app.post("/api/schedule", response_model=ScheduleResult)
+def generate_schedule(request: ScheduleRequest):
     try:
         engine = SchedulingEngine(request)
         result = engine.generate_schedule()
