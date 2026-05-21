@@ -94,7 +94,8 @@ export default function HomePage() {
       // Generate Schedule
       setError(null);
       try {
-        const response = await fetch('http://localhost:8000/api/schedule/type-1', {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${API_URL}/api/schedule/type-1`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ collaborators: team, shifts }),
