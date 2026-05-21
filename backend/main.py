@@ -17,7 +17,7 @@ app.add_middleware(
 def generate_type_1(request: ScheduleRequest):
     try:
         engine = SchedulingEngine(request)
-        result = engine.generate_type_1_schedule()
+        result = engine.generate_schedule()
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
