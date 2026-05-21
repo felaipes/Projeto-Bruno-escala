@@ -1,4 +1,4 @@
-import { api, type PublicScheduleResponse } from "@/lib/api";
+import { prisma } from "@/lib/db";
 import { CalendarView } from "@/components/CalendarView";
 import { AlertCircle } from "lucide-react";
 
@@ -9,13 +9,37 @@ const MONTH_NAMES = [
 
 export default async function ProfissionalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  let schedule: PublicScheduleResponse | null = null;
+  let schedule: {
+    id: string;
+    month: number;
+    year: number;
+    assignments: { id: string; shift_id: string; shift_name: string; collaborator_id: string; collaborator_name: string; date: string; start_time: string; end_time: string }[];
+  } | null = null;
   let error: string | null = null;
 
   try {
-    schedule = await api.schedules.getPublic(token);
-  } catch (e: any) {
-    error = e.message;
+    const found = await prisma.schedule.findUnique({
+      where: { access_token: token },
+      include: { assignments: true },
+    });
+    if (!found) throw new Error("Escala não encontrada");
+    schedule = {
+      id: found.id,
+      month: found.month,
+      year: found.year,
+      assignments: found.assignments.map((a) => ({
+        id: a.id,
+        shift_id: a.shift_id,
+        shift_name: a.shift_name,
+        collaborator_id: a.collaborator_id,
+        collaborator_name: a.collaborator_name,
+        date: a.date,
+        start_time: a.start_time,
+        end_time: a.end_time,
+      })),
+    };
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : "Erro desconhecido";
   }
 
   return (

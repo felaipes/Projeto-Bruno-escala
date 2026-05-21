@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE = "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -100,9 +100,9 @@ export type AssignmentCreate = {
 
 export const api = {
   collaborators: {
-    list: () => request<Collaborator[]>("/api/collaborators/"),
+    list: () => request<Collaborator[]>("/api/collaborators"),
     create: (data: Omit<Collaborator, "id" | "created_at">) =>
-      request<Collaborator>("/api/collaborators/", { method: "POST", body: JSON.stringify(data) }),
+      request<Collaborator>("/api/collaborators", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: Omit<Collaborator, "id" | "created_at">) =>
       request<Collaborator>(`/api/collaborators/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     remove: (id: string) =>
@@ -110,9 +110,9 @@ export const api = {
   },
 
   shifts: {
-    list: () => request<Shift[]>("/api/shifts/"),
+    list: () => request<Shift[]>("/api/shifts"),
     create: (data: Omit<Shift, "id" | "created_at">) =>
-      request<Shift>("/api/shifts/", { method: "POST", body: JSON.stringify(data) }),
+      request<Shift>("/api/shifts", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: Omit<Shift, "id" | "created_at">) =>
       request<Shift>(`/api/shifts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     remove: (id: string) =>
@@ -120,7 +120,7 @@ export const api = {
   },
 
   schedules: {
-    list: () => request<ScheduleListItem[]>("/api/schedules/"),
+    list: () => request<ScheduleListItem[]>("/api/schedules"),
     getById: (id: string) => request<FullScheduleResponse>(`/api/schedules/${id}`),
     generate: (data: ScheduleRequest) =>
       request<ScheduleResult>("/api/schedules/generate", { method: "POST", body: JSON.stringify(data) }),

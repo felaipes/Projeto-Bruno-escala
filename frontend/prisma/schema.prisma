@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Collaborator {
+  id               String   @id @default(uuid())
+  name             String
+  role             String   // graduado | estagiario | recepcao | servicos_gerais
+  block_saturday_1 Boolean  @default(false)
+  created_at       DateTime @default(now())
+
+  @@map("collaborators")
+}
+
+model Schedule {
+  id           String       @id @default(uuid())
+  month        Int
+  year         Int
+  access_token String       @unique @default(uuid())
+  created_at   DateTime     @default(now())
+  assignments  Assignment[]
+
+  @@map("schedules")
+}
+
+model Assignment {
+  id                String   @id @default(uuid())
+  schedule_id       String
+  collaborator_id   String
+  collaborator_name String
+  shift_id          String
+  shift_name        String
+  date              String   // "YYYY-MM-DD"
+  start_time        String
+  end_time          String
+
+  schedule Schedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+
+  @@map("assignments")
+}
