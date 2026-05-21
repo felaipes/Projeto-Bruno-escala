@@ -45,7 +45,7 @@ export default function HomePage() {
     recepcao: 1,
     servicos_gerais: 1
   });
-  const [selectedDays, setSelectedDays] = useState<string[]>(['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']);
+  const [selectedDays, setSelectedDays] = useState<string[]>(['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']);
 
   // Step 2 & 3 State
   const [team, setTeam] = useState<Collaborator[]>([]);
