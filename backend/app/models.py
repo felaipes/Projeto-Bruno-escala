@@ -1,33 +1,24 @@
 from pydantic import BaseModel
 from typing import List, Dict
-from datetime import time
 
 class Collaborator(BaseModel):
     id: str
     name: str
     role: str  # 'graduado', 'estagiario', 'recepcao', 'servicos_gerais'
     block_saturday_1: bool = False
-    professor_mode: str = 'nenhum'  # 'abre', 'fecha' ou 'nenhum'
-
-class Shift(BaseModel):
-    id: str
-    name: str # 'Sábado 1', 'Sábado 2', 'Domingo'
-    start_time: time
-    required_graduados: int = 0
-    required_estagiarios: int = 0
-    required_recepcao: int = 0
-    required_servicos_gerais: int = 0
+    start_time: str
+    end_time: str
 
 class ScheduleRequest(BaseModel):
     collaborators: List[Collaborator]
-    shifts: List[Shift]
+    selected_days: List[str]
 
 class ShiftAssignment(BaseModel):
     shift_id: str
     collaborator_id: str
     date: str
-    start_time: time
-    end_time: time
+    start_time: str
+    end_time: str
 
 class ScheduleResult(BaseModel):
     assignments: List[ShiftAssignment]

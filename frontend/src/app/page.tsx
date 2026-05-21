@@ -1,23 +1,14 @@
 "use client";
 import { useState, useMemo } from "react";
-import { AlertCircle, Home, Calendar, Users, Clock, CalendarDays } from 'lucide-react';
+import { AlertCircle, Home, Calendar, Users, Clock, CalendarDays, CheckCircle2 } from 'lucide-react';
 
 type Collaborator = {
   id: string;
   name: string;
   role: string;
   block_saturday_1: boolean;
-  professor_mode?: string;
-};
-
-type Shift = {
-  id: string;
-  name: string;
   start_time: string;
-  required_graduados: number;
-  required_estagiarios: number;
-  required_recepcao: number;
-  required_servicos_gerais: number;
+  end_time: string;
 };
 
 type ShiftAssignment = {
@@ -56,11 +47,8 @@ export default function HomePage() {
   });
   const [selectedDays, setSelectedDays] = useState<string[]>(['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']);
 
-  // Step 2 State
+  // Step 2 & 3 State
   const [team, setTeam] = useState<Collaborator[]>([]);
-
-  // Step 3 State
-  const [shifts, setShifts] = useState<Shift[]>([]);
 
   // Result State
   const [result, setResult] = useState<ScheduleResult | null>(null);
@@ -104,7 +92,8 @@ export default function HomePage() {
               name: '',
               role: r.key,
               block_saturday_1: false,
-              professor_mode: r.key === 'graduado' ? 'nenhum' : undefined
+              start_time: '08:00',
+              end_time: r.key === 'estagiario' ? '13:00' : '14:00'
             });
          }
       }
@@ -112,41 +101,28 @@ export default function HomePage() {
     setTeam(newTeam);
   };
 
-  const generateShifts = () => {
-    let newShifts: Shift[] = [];
-    const turnos = [
-       { suffix: '1', name: 'Turno 1', defaultTime: '05:00' },
-       { suffix: '2', name: 'Turno 2', defaultTime: '11:00' },
-       { suffix: '3', name: 'Turno 3', defaultTime: '17:00' },
-    ];
+  const parseTimeToMinutes = (timeStr: string) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const calculateDuration = (start: string, end: string) => {
+    const startMins = parseTimeToMinutes(start);
+    const endMins = parseTimeToMinutes(end);
+    let diff = endMins - startMins;
+    if (diff < 0) diff += 24 * 60; // cruza a meia noite
     
-    // Sort selected days by standard week order
-    const sortedDays = [...selectedDays].sort((a, b) => daysOfWeek.indexOf(a) - daysOfWeek.indexOf(b));
-    
-    sortedDays.forEach(day => {
-       const isWeekend = day === 'Sábado' || day === 'Domingo';
-       const weeks = isWeekend ? [1, 2, 3, 4] : [1];
-       
-       weeks.forEach(week => {
-           const dayPrefix = isWeekend ? `${day} (Semana ${week})` : day;
-           const dayIdPrefix = isWeekend ? `${day}-Semana${week}` : day;
-           
-           turnos.forEach(t => {
-              const shiftId = `${dayIdPrefix}-${t.suffix}`;
-              const existing = shifts.find(s => s.id === shiftId);
-              newShifts.push({
-                 id: shiftId,
-                 name: `${dayPrefix} - ${t.name}`,
-                 start_time: existing ? existing.start_time : t.defaultTime,
-                 required_graduados: roleCounts.graduado,
-                 required_estagiarios: roleCounts.estagiario,
-                 required_recepcao: roleCounts.recepcao,
-                 required_servicos_gerais: roleCounts.servicos_gerais
-              });
-           });
-       });
-    });
-    setShifts(newShifts);
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    return { h, m, totalMins: diff };
+  };
+
+  const isValidDuration = (c: Collaborator) => {
+    const { totalMins } = calculateDuration(c.start_time, c.end_time);
+    if (c.role === 'estagiario' && totalMins > 5 * 60) return false;
+    if (c.role !== 'estagiario' && totalMins > 6 * 60) return false;
+    return true;
   };
 
   const handleNext = async () => {
@@ -159,24 +135,28 @@ export default function HomePage() {
       generateTeam();
       setStep(2);
     } else if (step === 2) {
-      // Validate names
       const emptyNames = team.some(c => c.name.trim() === '');
       if (emptyNames) {
         setError("Por favor, preencha o nome de todos os colaboradores.");
         return;
       }
       setError(null);
-      generateShifts();
       setStep(3);
     } else if (step === 3) {
-      // Generate Schedule
+      // Validate duracoes
+      const invalidMembers = team.filter(c => !isValidDuration(c));
+      if (invalidMembers.length > 0) {
+        setError("Existem colaboradores excedendo o limite da carga horária permitida (Graduados: 6h, Estagiários: 5h). Corrija os campos em vermelho.");
+        return;
+      }
+
       setError(null);
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://projeto-bruno-escala.onrender.com';
         const response = await fetch(`${API_URL}/api/schedule/type-1`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ collaborators: team, shifts }),
+          body: JSON.stringify({ collaborators: team, selected_days: selectedDays }),
         });
 
         if (!response.ok) {
@@ -208,10 +188,6 @@ export default function HomePage() {
     setTeam(team.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
   };
 
-  const updateShift = (id: string, field: keyof Shift, value: any) => {
-    setShifts(shifts.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
-  };
-
   const filteredAssignments = useMemo(() => {
     return (result?.assignments || []).filter(assignment => {
       const role = team.find((c) => c.id === assignment.collaborator_id)?.role || '';
@@ -224,20 +200,22 @@ export default function HomePage() {
   
   const calendarDays = useMemo(() => {
     const groups: Record<string, ShiftAssignment[]> = {};
-    const dayGroups = [...daysOfWeek];
+    const dayGroups = [...daysOfWeek].filter(d => selectedDays.includes(d));
     
     // Expand weekends in calendar columns
     if (selectedDays.includes('Sábado')) {
+        dayGroups.splice(dayGroups.indexOf('Sábado'), 1); // remove o genérico
         dayGroups.push('Sábado (Semana 1)', 'Sábado (Semana 2)', 'Sábado (Semana 3)', 'Sábado (Semana 4)');
     }
     if (selectedDays.includes('Domingo')) {
+        dayGroups.splice(dayGroups.indexOf('Domingo'), 1); // remove o genérico
         dayGroups.push('Domingo (Semana 1)', 'Domingo (Semana 2)', 'Domingo (Semana 3)', 'Domingo (Semana 4)');
     }
     
     dayGroups.forEach(d => groups[d] = []);
 
     filteredAssignments.forEach(assignment => {
-      const dateKey = assignment.date.split(' - ')[0]; // Gets e.g. "Sábado (Semana 1)" or "Segunda"
+      const dateKey = assignment.date; // already has "Sábado (Semana X)" or "Segunda"
       if (groups[dateKey]) {
         groups[dateKey].push(assignment);
       } else {
@@ -254,7 +232,7 @@ export default function HomePage() {
     return groups;
   }, [filteredAssignments, selectedDays]);
 
-  const renderTeamInputs = (roleKey: string, roleName: string) => {
+  const renderNamesInput = (roleKey: string, roleName: string) => {
     const members = team.filter(c => c.role === roleKey);
     if (members.length === 0) return null;
     
@@ -275,29 +253,6 @@ export default function HomePage() {
                 className="flex-1 p-2.5 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none"
               />
               
-              {roleKey === 'graduado' && (
-                <div className="flex bg-[#141414] rounded-lg border border-[#232323] overflow-hidden shrink-0">
-                  <button
-                    onClick={() => updateCollaborator(c.id, 'professor_mode', 'nenhum')}
-                    className={`px-3 py-2 text-[10px] sm:text-xs font-bold transition-colors ${c.professor_mode === 'nenhum' || !c.professor_mode ? 'bg-[#232323] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
-                  >
-                    Qualquer
-                  </button>
-                  <button
-                    onClick={() => updateCollaborator(c.id, 'professor_mode', 'abre')}
-                    className={`px-3 py-2 text-[10px] sm:text-xs font-bold transition-colors ${c.professor_mode === 'abre' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
-                  >
-                    Abre (Cedo)
-                  </button>
-                  <button
-                    onClick={() => updateCollaborator(c.id, 'professor_mode', 'fecha')}
-                    className={`px-3 py-2 text-[10px] sm:text-xs font-bold transition-colors ${c.professor_mode === 'fecha' ? 'bg-[#FF4D1C] text-[#FFFFFF]' : 'text-[#A1A1A1] hover:bg-[#232323]'}`}
-                  >
-                    Fecha (Tarde)
-                  </button>
-                </div>
-              )}
-              
               <label className="flex items-center gap-2 cursor-pointer bg-[#141414] px-3 py-2.5 border border-[#232323] rounded-lg shrink-0">
                 <input
                   type="checkbox"
@@ -310,6 +265,71 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+      </div>
+    );
+  };
+
+  const getRoleBadge = (role: string) => {
+    switch(role) {
+      case 'graduado': return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">Graduado (Max 6h)</span>;
+      case 'estagiario': return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Estagiário (Max 5h)</span>;
+      case 'recepcao': return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">Recepção (Max 6h)</span>;
+      default: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">Limpeza (Max 6h)</span>;
+    }
+  };
+
+  const renderTimesTable = () => {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-[#232323]">
+              <th className="p-3 text-xs font-semibold text-[#A1A1A1] uppercase tracking-wider">Colaborador</th>
+              <th className="p-3 text-xs font-semibold text-[#A1A1A1] uppercase tracking-wider">Entrada</th>
+              <th className="p-3 text-xs font-semibold text-[#A1A1A1] uppercase tracking-wider">Saída</th>
+              <th className="p-3 text-xs font-semibold text-[#A1A1A1] uppercase tracking-wider">Total de Horas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {team.map(c => {
+              const { h, m } = calculateDuration(c.start_time, c.end_time);
+              const valid = isValidDuration(c);
+              
+              return (
+                <tr key={c.id} className="border-b border-[#232323] hover:bg-[#141414]/50 transition-colors">
+                  <td className="p-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="font-bold text-[#FFFFFF]">{c.name || 'Sem nome'}</span>
+                      {getRoleBadge(c.role)}
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <input
+                      type="time"
+                      value={c.start_time}
+                      onChange={(e) => updateCollaborator(c.id, 'start_time', e.target.value)}
+                      className="p-2 bg-[#0A0A0A] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none font-mono"
+                    />
+                  </td>
+                  <td className="p-3">
+                    <input
+                      type="time"
+                      value={c.end_time}
+                      onChange={(e) => updateCollaborator(c.id, 'end_time', e.target.value)}
+                      className="p-2 bg-[#0A0A0A] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none font-mono"
+                    />
+                  </td>
+                  <td className="p-3">
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-sm ${valid ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
+                      {valid ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                      {h}h {m > 0 ? `${m}m` : ''}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -378,9 +398,9 @@ export default function HomePage() {
             <div className="pt-4 border-t border-[#232323]">
               <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2 mb-2">
                 <CalendarDays className="text-[#FF4D1C]" />
-                Dias da Semana
+                Dias de Funcionamento
               </h2>
-              <p className="text-sm text-[#A1A1A1] mb-4">Selecione os dias de expediente. Sábados e Domingos geram 4 finais de semana para rodízio automático.</p>
+              <p className="text-sm text-[#A1A1A1] mb-4">A escala será desenhada para preencher os dias úteis selecionados. Finais de semana gerarão rodízio automático.</p>
               
               <div className="flex flex-wrap gap-3">
                 {daysOfWeek.map(day => (
@@ -406,67 +426,31 @@ export default function HomePage() {
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF]">2. Identificação da Equipe</h2>
-              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Marque quais professores abrem (primeiro turno) e fecham (último turno).</p>
+              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Digite o nome dos colaboradores que farão parte da grade.</p>
             </div>
 
             <div className="bg-[#141414] rounded-xl">
-              {renderTeamInputs('graduado', 'Professores Graduados')}
-              {renderTeamInputs('estagiario', 'Professores Estagiários')}
-              {renderTeamInputs('recepcao', 'Recepção')}
-              {renderTeamInputs('servicos_gerais', 'Limpeza / Serviços Gerais')}
+              {renderNamesInput('graduado', 'Professores Graduados')}
+              {renderNamesInput('estagiario', 'Professores Estagiários')}
+              {renderNamesInput('recepcao', 'Recepção')}
+              {renderNamesInput('servicos_gerais', 'Limpeza / Serviços Gerais')}
             </div>
           </div>
         )}
 
-        {/* Step 3: Turnos */}
+        {/* Step 3: Turnos Individuais */}
         {step === 3 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-[#FFFFFF] flex items-center gap-2">
                 <Clock className="text-[#FF4D1C]" />
-                3. Configuração de Turnos
+                3. Carga Horária e Horários (Novo)
               </h2>
-              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Defina o início de cada turno. Finais de semana foram multiplicados por 4 semanas para o rodízio.</p>
+              <p className="text-sm sm:text-base text-[#A1A1A1] mt-1">Defina a Entrada e Saída individualmente. O cálculo de horas é em tempo real.</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {shifts.map((s) => (
-                <div key={s.id} className="flex flex-col gap-3 p-4 border border-[#232323] bg-[#0A0A0A] rounded-xl">
-                  <div className="font-bold text-[#FFFFFF] text-sm truncate" title={s.name}>{s.name}</div>
-                  <div>
-                    <label className="text-xs font-semibold text-[#A1A1A1] uppercase tracking-wider mb-1 block">Início do Turno</label>
-                    <input
-                      type="time"
-                      value={s.start_time}
-                      onChange={(e) => updateShift(s.id, 'start_time', e.target.value)}
-                      className="p-2.5 bg-[#141414] border border-[#232323] rounded-lg text-[#FFFFFF] text-sm focus:ring-2 focus:ring-[#FF6B3D] outline-none w-full font-mono"
-                    />
-                  </div>
-                  
-                  {/* Opção avançada */}
-                  <details className="mt-2 text-xs">
-                    <summary className="text-[#A1A1A1] cursor-pointer hover:text-[#FFFFFF] select-none">Ajustar Quantidades deste Turno</summary>
-                    <div className="mt-3 grid grid-cols-2 gap-2 p-3 bg-[#141414] rounded-lg border border-[#232323]">
-                      <div>
-                        <label className="text-[10px] text-[#A1A1A1] uppercase">Grad.</label>
-                        <input type="number" min="0" value={s.required_graduados} onChange={(e) => updateShift(s.id, 'required_graduados', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[#A1A1A1] uppercase">Estag.</label>
-                        <input type="number" min="0" value={s.required_estagiarios} onChange={(e) => updateShift(s.id, 'required_estagiarios', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[#A1A1A1] uppercase">Recep.</label>
-                        <input type="number" min="0" value={s.required_recepcao} onChange={(e) => updateShift(s.id, 'required_recepcao', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-[#A1A1A1] uppercase">Limp.</label>
-                        <input type="number" min="0" value={s.required_servicos_gerais} onChange={(e) => updateShift(s.id, 'required_servicos_gerais', parseInt(e.target.value) || 0)} className="w-full bg-[#0A0A0A] border border-[#232323] rounded p-1 text-[#FFFFFF]"/>
-                      </div>
-                    </div>
-                  </details>
-                </div>
-              ))}
+            <div className="bg-[#0A0A0A] border border-[#232323] rounded-xl p-2 sm:p-4">
+               {renderTimesTable()}
             </div>
           </div>
         )}
@@ -533,7 +517,7 @@ export default function HomePage() {
                 <ul className="list-disc pl-5 text-xs sm:text-sm space-y-1 text-orange-300/80">
                   {result.unfilled_shifts.map((u, idx) => (
                     <li key={idx}>
-                      Faltam {u.missing} {u.role}(s) no dia/turno {shifts.find(s => s.id === u.shift_id)?.name}
+                      Faltam {u.missing} {u.role}(s) no dia/turno {u.shift_id}
                     </li>
                   ))}
                 </ul>
